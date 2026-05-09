@@ -1,0 +1,1496 @@
+openapi: 3.1.0
+info:
+  title: Suivicargo API
+  description: |
+    API de gestion et de suivi de cargaison par fret maritime.
+
+    Authentification : JWT Bearer dans le header `Authorization: Bearer <token>`.
+    Le token est obtenu via `POST /v1/auth/login`.
+
+    ## Rôles
+    - **ADMIN** : gestion des utilisateurs (employés/superviseurs)
+    - **SUPERVISOR** : gestion opérationnelle (navires, voyages, conteneurs, plans de paiement, statuts)
+    - **EMPLOYEE** : enlèvement, encaissement, lecture des cargaisons en cours
+  version: 1.0.0
+  contact:
+    name: Equipe Suivicargo
+  license:
+    name: Proprietary
+
+servers:
+  - url: http://localhost:8080/api
+    description: Local development
+  - url: https://api.suivicargo.example.com
+    description: Production
+
+tags:
+  - name: Auth
+    description: Authentification et inscription
+  - name: Cargaisons
+    description: Gestion des cargaisons (enlèvement, suivi, statut)
+  - name: Clients
+    description: Gestion des clients (expéditeurs/destinataires)
+  - name: Users
+    description: Gestion des utilisateurs (réservé ADMIN)
+  - name: Navires
+    description: Gestion des navires (réservé SUPERVISOR/ADMIN)
+  - name: Voyages
+    description: Gestion des voyages
+  - name: Conteneurs
+    description: Gestion des conteneurs
+  - name: Plans de paiement
+    description: Échéanciers (créés par SUPERVISOR)
+  - name: Règlements
+    description: Encaissements (saisis par EMPLOYEE)
+  - name: Factures
+    description: Consultation et téléchargement des factures
+  - name: Tracking public
+    description: Suivi de cargaison sans authentification
+
+security:
+  - bearerAuth: []
+
+# =====================================================================
+# Paths
+# =====================================================================
+paths:
+
+  # ---------- Auth ----------
+  /v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Se connecter
+      description: Authentifie un utilisateur et retourne un JWT.
+      security: []   # public
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Connexion réussie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /v1/auth/register:
+    post:
+      tags: [Auth]
+      summary: Inscrire un nouvel utilisateur
+      description: |
+        Crée un compte employé ou superviseur. **Réservé à l'ADMIN.**
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Utilisateur créé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '409':
+          description: Email déjà utilisé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ---------- Cargaisons ----------
+  /v1/cargaisons:
+    get:
+      tags: [Cargaisons]
+      summary: Lister les cargaisons en cours
+      description: Tous les rôles authentifiés peuvent consulter cette liste.
+      operationId: listCargaisonsEnCours
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - $ref: '#/components/parameters/SortParam'
+      responses:
+        '200':
+          description: Page de cargaisons
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponseCargaison'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [Cargaisons]
+      summary: Créer une cargaison à l'enlèvement
+      description: Le numéro de traçage est généré automatiquement.
+      operationId: createCargaison
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCargaisonRequest'
+      responses:
+        '201':
+          description: Cargaison créée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CargaisonDto'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Client introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /v1/cargaisons/all:
+    get:
+      tags: [Cargaisons]
+      summary: Lister toutes les cargaisons
+      description: Inclut les cargaisons livrées et annulées. Réservé SUPERVISOR/ADMIN.
+      operationId: listAllCargaisons
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - $ref: '#/components/parameters/SortParam'
+      responses:
+        '200':
+          description: Page de cargaisons
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponseCargaison'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/cargaisons/{id}:
+    get:
+      tags: [Cargaisons]
+      summary: Détail complet d'une cargaison (infos client + historique)
+      operationId: getCargaisonById
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Détail enrichi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CargaisonDetailDto'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/cargaisons/{id}/statut:
+    patch:
+      tags: [Cargaisons]
+      summary: Changer le statut d'une cargaison
+      description: Réservé SUPERVISOR/ADMIN.
+      operationId: changerStatutCargaison
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+        - in: query
+          name: statut
+          required: true
+          schema:
+            $ref: '#/components/schemas/StatutCargaison'
+        - in: query
+          name: commentaire
+          required: false
+          schema:
+            type: string
+            maxLength: 500
+      responses:
+        '200':
+          description: Statut mis à jour
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CargaisonDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------- Tracking public ----------
+  /v1/tracking/{numeroTracage}:
+    get:
+      tags: [Tracking public]
+      summary: Suivre une cargaison par son numéro de traçage
+      description: Endpoint public, ne nécessite pas d'authentification.
+      security: []
+      operationId: trackPublic
+      parameters:
+        - in: path
+          name: numeroTracage
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Z]{2,5}-\d{4}-\d{6}$'
+            example: MAR-2026-000042
+      responses:
+        '200':
+          description: Informations publiques de suivi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrackingPublicResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------- Clients ----------
+  /v1/clients:
+    get:
+      tags: [Clients]
+      summary: Rechercher des clients
+      operationId: searchClients
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+          description: Recherche libre (nom, prénom, téléphone)
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - $ref: '#/components/parameters/SortParam'
+      responses:
+        '200':
+          description: Page de clients
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponseClient'
+    post:
+      tags: [Clients]
+      summary: Créer un client
+      operationId: createClient
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateClientRequest'
+      responses:
+        '201':
+          description: Créé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientDto'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /v1/clients/{id}:
+    get:
+      tags: [Clients]
+      summary: Détail client
+      operationId: getClientById
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Détail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientDto'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Clients]
+      summary: Modifier un client (SUPERVISOR/ADMIN)
+      operationId: updateClient
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateClientRequest'
+      responses:
+        '200':
+          description: Modifié
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientDto'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Clients]
+      summary: Supprimer (soft) un client (SUPERVISOR/ADMIN)
+      operationId: deleteClient
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '204':
+          description: Supprimé
+
+  # ---------- Users (admin) ----------
+  /v1/users:
+    get:
+      tags: [Users]
+      summary: Lister les utilisateurs (ADMIN)
+      operationId: listUsers
+      parameters:
+        - in: query
+          name: role
+          schema:
+            $ref: '#/components/schemas/Role'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: Page d'utilisateurs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponseUser'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/users/{id}:
+    get:
+      tags: [Users]
+      summary: Détail utilisateur (ADMIN)
+      operationId: getUserById
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Détail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDto'
+    patch:
+      tags: [Users]
+      summary: Modifier un utilisateur (ADMIN)
+      operationId: updateUser
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: Modifié
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDto'
+    delete:
+      tags: [Users]
+      summary: Supprimer (soft) un utilisateur (ADMIN)
+      operationId: deleteUser
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '204':
+          description: Supprimé
+
+  # ---------- Navires ----------
+  /v1/navires:
+    get:
+      tags: [Navires]
+      summary: Lister les navires
+      operationId: listNavires
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: Page de navires
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponseNavire'
+    post:
+      tags: [Navires]
+      summary: Créer un navire (SUPERVISOR/ADMIN)
+      operationId: createNavire
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNavireRequest'
+      responses:
+        '201':
+          description: Créé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NavireDto'
+  /v1/navires/{id}:
+    get:
+      tags: [Navires]
+      summary: Détail navire
+      operationId: getNavireById
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Détail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NavireDto'
+    patch:
+      tags: [Navires]
+      summary: Modifier un navire
+      operationId: updateNavire
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateNavireRequest'
+      responses:
+        '200':
+          description: Modifié
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NavireDto'
+    delete:
+      tags: [Navires]
+      summary: Supprimer un navire
+      operationId: deleteNavire
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '204':
+          description: Supprimé
+
+  # ---------- Voyages ----------
+  /v1/voyages:
+    get:
+      tags: [Voyages]
+      summary: Lister les voyages
+      operationId: listVoyages
+      parameters:
+        - in: query
+          name: navireId
+          schema: { type: integer, format: int64 }
+        - in: query
+          name: statut
+          schema:
+            $ref: '#/components/schemas/StatutVoyage'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: Page de voyages
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponseVoyage'
+    post:
+      tags: [Voyages]
+      summary: Créer un voyage (SUPERVISOR/ADMIN)
+      operationId: createVoyage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVoyageRequest'
+      responses:
+        '201':
+          description: Créé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoyageDto'
+  /v1/voyages/{id}:
+    get:
+      tags: [Voyages]
+      operationId: getVoyageById
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '200':
+          description: Détail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoyageDto'
+    patch:
+      tags: [Voyages]
+      operationId: updateVoyage
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateVoyageRequest'
+      responses:
+        '200':
+          description: Modifié
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoyageDto'
+    delete:
+      tags: [Voyages]
+      operationId: deleteVoyage
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '204':
+          description: Supprimé
+
+  # ---------- Conteneurs ----------
+  /v1/conteneurs:
+    get:
+      tags: [Conteneurs]
+      summary: Lister les conteneurs
+      operationId: listConteneurs
+      parameters:
+        - in: query
+          name: voyageId
+          schema: { type: integer, format: int64 }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: Page de conteneurs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponseConteneur'
+    post:
+      tags: [Conteneurs]
+      summary: Créer un conteneur (SUPERVISOR/ADMIN)
+      operationId: createConteneur
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConteneurRequest'
+      responses:
+        '201':
+          description: Créé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConteneurDto'
+  /v1/conteneurs/{id}:
+    get:
+      tags: [Conteneurs]
+      operationId: getConteneurById
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '200':
+          description: Détail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConteneurDto'
+    patch:
+      tags: [Conteneurs]
+      operationId: updateConteneur
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateConteneurRequest'
+      responses:
+        '200':
+          description: Modifié
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConteneurDto'
+    delete:
+      tags: [Conteneurs]
+      operationId: deleteConteneur
+      parameters: [{ $ref: '#/components/parameters/IdParam' }]
+      responses:
+        '204':
+          description: Supprimé
+
+  # ---------- Plans de paiement ----------
+  /v1/plans-paiement:
+    post:
+      tags: [Plans de paiement]
+      summary: Créer un plan de paiement (SUPERVISOR/ADMIN)
+      operationId: createPlanPaiement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePlanPaiementRequest'
+      responses:
+        '201':
+          description: Créé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanPaiementDto'
+
+  /v1/plans-paiement/by-cargaison/{cargaisonId}:
+    get:
+      tags: [Plans de paiement]
+      summary: Plan de paiement d'une cargaison
+      operationId: getPlanByCargaison
+      parameters:
+        - in: path
+          name: cargaisonId
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: Détail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanPaiementDto'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------- Règlements ----------
+  /v1/reglements:
+    post:
+      tags: [Règlements]
+      summary: Enregistrer un règlement
+      operationId: createReglement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReglementRequest'
+      responses:
+        '201':
+          description: Créé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReglementDto'
+
+  /v1/reglements/by-cargaison/{cargaisonId}:
+    get:
+      tags: [Règlements]
+      summary: Règlements d'une cargaison
+      operationId: listReglementsByCargaison
+      parameters:
+        - in: path
+          name: cargaisonId
+          required: true
+          schema: { type: integer, format: int64 }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: Page de règlements
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponseReglement'
+
+  # ---------- Factures ----------
+  /v1/factures/by-cargaison/{cargaisonId}:
+    get:
+      tags: [Factures]
+      summary: Facture d'une cargaison
+      operationId: getFactureByCargaison
+      parameters:
+        - in: path
+          name: cargaisonId
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: Détail facture
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactureDto'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/factures/by-cargaison/{cargaisonId}/pdf:
+    get:
+      tags: [Factures]
+      summary: Télécharger le PDF de la facture
+      operationId: downloadFacturePdf
+      parameters:
+        - in: path
+          name: cargaisonId
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: PDF de la facture
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+
+# =====================================================================
+# Components
+# =====================================================================
+components:
+
+  # ---------- Security ----------
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT obtenu via `POST /v1/auth/login`
+
+  # ---------- Reusable parameters ----------
+  parameters:
+    IdParam:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    PageParam:
+      in: query
+      name: page
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+      description: Numéro de page (0-indexé)
+    SizeParam:
+      in: query
+      name: size
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 20
+      description: Nombre d'éléments par page
+    SortParam:
+      in: query
+      name: sort
+      schema:
+        type: array
+        items:
+          type: string
+        example: [dateCreation,desc]
+      description: Tri au format `champ,asc|desc`. Plusieurs critères possibles.
+
+  # ---------- Reusable responses ----------
+  responses:
+    Unauthorized:
+      description: Non authentifié ou token invalide
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    Forbidden:
+      description: Authentifié mais sans le rôle requis
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    NotFound:
+      description: Ressource introuvable
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    ValidationError:
+      description: Erreur de validation des champs
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+
+  # ---------- Schemas ----------
+  schemas:
+
+    # --- Enums ---
+    Role:
+      type: string
+      enum: [ADMIN, SUPERVISOR, EMPLOYEE]
+    StatutCargaison:
+      type: string
+      enum:
+        - ENLEVE
+        - EN_ENTREPOT
+        - CHARGE_NAVIRE
+        - EN_MER
+        - AU_PORT_ARRIVEE
+        - EN_DOUANE
+        - LIVRE
+        - ANNULE
+    StatutPaiement:
+      type: string
+      enum: [EN_ATTENTE, PARTIEL, PAYE, EN_RETARD, ANNULE]
+    StatutVoyage:
+      type: string
+      enum: [PROGRAMME, EN_MER, ARRIVE, ANNULE]
+    ModePaiement:
+      type: string
+      enum: [ESPECES, VIREMENT, MOBILE_MONEY, CHEQUE, CARTE]
+
+    # --- Auth ---
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 150
+        password:
+          type: string
+          minLength: 1
+          maxLength: 100
+          format: password
+    RegisterRequest:
+      type: object
+      required: [email, password, nom, prenom, role]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 150
+        password:
+          type: string
+          minLength: 8
+          maxLength: 100
+          format: password
+        nom:
+          type: string
+          minLength: 1
+          maxLength: 100
+        prenom:
+          type: string
+          minLength: 1
+          maxLength: 100
+        telephone:
+          type: string
+          maxLength: 30
+        role:
+          $ref: '#/components/schemas/Role'
+    AuthResponse:
+      type: object
+      required: [token, tokenType, expiresInMinutes, user]
+      properties:
+        token:
+          type: string
+          description: JWT à utiliser dans le header Authorization
+        tokenType:
+          type: string
+          example: Bearer
+        expiresInMinutes:
+          type: integer
+          format: int64
+        user:
+          $ref: '#/components/schemas/UserInfo'
+    UserInfo:
+      type: object
+      required: [id, email, nom, prenom, role]
+      properties:
+        id:
+          type: integer
+          format: int64
+        email:
+          type: string
+          format: email
+        nom:
+          type: string
+        prenom:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+
+    # --- Cargaison ---
+    CreateCargaisonRequest:
+      type: object
+      required: [clientId, nombreColis, montantTotal, montantRegle]
+      properties:
+        clientId:
+          type: integer
+          format: int64
+          minimum: 1
+        nombreColis:
+          type: integer
+          minimum: 1
+        poidsKg:
+          type: number
+          format: double
+          minimum: 0
+        volumeM3:
+          type: number
+          format: double
+          minimum: 0
+        montantTotal:
+          type: number
+          format: double
+          minimum: 0
+        montantRegle:
+          type: number
+          format: double
+          minimum: 0
+        devise:
+          type: string
+          minLength: 3
+          maxLength: 3
+          example: XOF
+        observations:
+          type: string
+          maxLength: 1000
+    CargaisonDto:
+      type: object
+      required:
+        - id
+        - numeroTracage
+        - clientId
+        - nombreColis
+        - montantTotal
+        - montantRegle
+        - montantRestant
+        - devise
+        - statut
+        - factureEnvoyee
+        - dateCreation
+      properties:
+        id:
+          type: integer
+          format: int64
+        numeroTracage:
+          type: string
+          example: MAR-2026-000042
+        clientId:
+          type: integer
+          format: int64
+        clientNomComplet:
+          type: string
+        clientTelephone:
+          type: string
+        conteneurId:
+          type: integer
+          format: int64
+          nullable: true
+        conteneurNumero:
+          type: string
+          nullable: true
+        nombreColis:
+          type: integer
+        poidsKg:
+          type: number
+          format: double
+          nullable: true
+        volumeM3:
+          type: number
+          format: double
+          nullable: true
+        montantTotal:
+          type: number
+          format: double
+        montantRegle:
+          type: number
+          format: double
+        montantRestant:
+          type: number
+          format: double
+        devise:
+          type: string
+        statut:
+          $ref: '#/components/schemas/StatutCargaison'
+        observations:
+          type: string
+          nullable: true
+        factureEnvoyee:
+          type: boolean
+        dateEnlevement:
+          type: string
+          format: date
+          nullable: true
+        dateLivraisonEstimee:
+          type: string
+          format: date
+          nullable: true
+        dateLivraisonReelle:
+          type: string
+          format: date
+          nullable: true
+        dateCreation:
+          type: string
+          format: date-time
+
+    CargaisonDetailDto:
+      type: object
+      required:
+        - id
+        - numeroTracage
+        - clientId
+        - nombreColis
+        - montantTotal
+        - statut
+        - historique
+      properties:
+        id: { type: integer, format: int64 }
+        numeroTracage: { type: string }
+        clientId: { type: integer, format: int64 }
+        clientNom: { type: string }
+        clientPrenom: { type: string }
+        clientTelephone: { type: string, nullable: true }
+        clientEmail: { type: string, nullable: true }
+        adresseEnlevement: { type: string, nullable: true }
+        adresseLivraison: { type: string, nullable: true }
+        conteneurId: { type: integer, format: int64, nullable: true }
+        conteneurNumero: { type: string, nullable: true }
+        nombreColis: { type: integer }
+        poidsKg: { type: number, format: double, nullable: true }
+        volumeM3: { type: number, format: double, nullable: true }
+        montantTotal: { type: number, format: double }
+        montantRegle: { type: number, format: double }
+        montantRestant: { type: number, format: double }
+        devise: { type: string }
+        statut: { $ref: '#/components/schemas/StatutCargaison' }
+        observations: { type: string, nullable: true }
+        factureEnvoyee: { type: boolean }
+        dateEnlevement: { type: string, format: date, nullable: true }
+        dateLivraisonEstimee: { type: string, format: date, nullable: true }
+        dateLivraisonReelle: { type: string, format: date, nullable: true }
+        dateCreation: { type: string, format: date-time }
+        historique:
+          type: array
+          items: { $ref: '#/components/schemas/EvenementHistoriqueDto' }
+
+    EvenementHistoriqueDto:
+      type: object
+      required: [id, nouveauStatut, dateChangement]
+      properties:
+        id: { type: integer, format: int64 }
+        ancienStatut:
+          allOf:
+            - $ref: '#/components/schemas/StatutCargaison'
+          nullable: true
+        nouveauStatut: { $ref: '#/components/schemas/StatutCargaison' }
+        commentaire: { type: string, nullable: true }
+        auteur: { type: string, nullable: true }
+        dateChangement: { type: string, format: date-time }
+
+    # --- Tracking public ---
+    TrackingPublicResponse:
+      type: object
+      required: [numeroTracage, statutActuel, nombreColis, historique]
+      properties:
+        numeroTracage:
+          type: string
+        statutActuel:
+          $ref: '#/components/schemas/StatutCargaison'
+        nombreColis:
+          type: integer
+        portDepart:
+          type: string
+          nullable: true
+        portArrivee:
+          type: string
+          nullable: true
+        historique:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvenementTracking'
+    EvenementTracking:
+      type: object
+      required: [statut, dateChangement]
+      properties:
+        statut:
+          $ref: '#/components/schemas/StatutCargaison'
+        dateChangement:
+          type: string
+          format: date-time
+        commentaire:
+          type: string
+          nullable: true
+
+    # --- Pagination ---
+    PageResponseCargaison:
+      type: object
+      required: [content, page, size, totalElements, totalPages, first, last]
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/CargaisonDto'
+        page:
+          type: integer
+        size:
+          type: integer
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+        first:
+          type: boolean
+        last:
+          type: boolean
+
+    # --- Erreurs ---
+    ApiError:
+      type: object
+      required: [timestamp, status, error, message]
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: integer
+          example: 400
+        error:
+          type: string
+          example: Bad Request
+        code:
+          type: string
+          example: VALIDATION_ERROR
+        message:
+          type: string
+        path:
+          type: string
+        fieldErrors:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/FieldErrorDetail'
+    FieldErrorDetail:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+        rejectedValue:
+          nullable: true
+
+    # --- Client ---
+    ClientDto:
+      type: object
+      required: [id, nom, prenom, telephone, adresseEnlevement, adresseLivraison]
+      properties:
+        id: { type: integer, format: int64 }
+        nom: { type: string }
+        prenom: { type: string }
+        telephone: { type: string }
+        email: { type: string, nullable: true }
+        adresseEnlevement: { type: string }
+        adresseLivraison: { type: string }
+        dateCreation: { type: string, format: date-time }
+    CreateClientRequest:
+      type: object
+      required: [nom, prenom, telephone, adresseEnlevement, adresseLivraison]
+      properties:
+        nom: { type: string, maxLength: 100 }
+        prenom: { type: string, maxLength: 100 }
+        telephone:
+          type: string
+          maxLength: 30
+          pattern: '^\+?[0-9]{8,15}$'
+        email: { type: string, format: email, maxLength: 150 }
+        adresseEnlevement: { type: string, maxLength: 500 }
+        adresseLivraison: { type: string, maxLength: 500 }
+    UpdateClientRequest:
+      type: object
+      properties:
+        nom: { type: string, maxLength: 100 }
+        prenom: { type: string, maxLength: 100 }
+        telephone:
+          type: string
+          maxLength: 30
+          pattern: '^\+?[0-9]{8,15}$'
+        email: { type: string, format: email, maxLength: 150 }
+        adresseEnlevement: { type: string, maxLength: 500 }
+        adresseLivraison: { type: string, maxLength: 500 }
+    PageResponseClient:
+      allOf:
+        - $ref: '#/components/schemas/PageBase'
+        - type: object
+          properties:
+            content:
+              type: array
+              items: { $ref: '#/components/schemas/ClientDto' }
+
+    # --- User ---
+    UserDto:
+      type: object
+      required: [id, email, nom, prenom, role, actif]
+      properties:
+        id: { type: integer, format: int64 }
+        email: { type: string, format: email }
+        nom: { type: string }
+        prenom: { type: string }
+        telephone: { type: string, nullable: true }
+        role: { $ref: '#/components/schemas/Role' }
+        actif: { type: boolean }
+        dateCreation: { type: string, format: date-time }
+    UpdateUserRequest:
+      type: object
+      properties:
+        nom: { type: string, maxLength: 100 }
+        prenom: { type: string, maxLength: 100 }
+        telephone: { type: string, maxLength: 30 }
+        role: { $ref: '#/components/schemas/Role' }
+        actif: { type: boolean }
+    PageResponseUser:
+      allOf:
+        - $ref: '#/components/schemas/PageBase'
+        - type: object
+          properties:
+            content:
+              type: array
+              items: { $ref: '#/components/schemas/UserDto' }
+
+    # --- Navire ---
+    NavireDto:
+      type: object
+      required: [id, nom, imo]
+      properties:
+        id: { type: integer, format: int64 }
+        nom: { type: string }
+        imo: { type: string, pattern: '^\d{7}$' }
+        pavillon: { type: string, nullable: true }
+        capaciteEvp: { type: integer, nullable: true }
+    CreateNavireRequest:
+      type: object
+      required: [nom, imo]
+      properties:
+        nom: { type: string, maxLength: 150 }
+        imo: { type: string, pattern: '^\d{7}$' }
+        pavillon: { type: string, maxLength: 50 }
+        capaciteEvp: { type: integer, minimum: 1 }
+    UpdateNavireRequest:
+      type: object
+      properties:
+        nom: { type: string, maxLength: 150 }
+        pavillon: { type: string, maxLength: 50 }
+        capaciteEvp: { type: integer, minimum: 1 }
+    PageResponseNavire:
+      allOf:
+        - $ref: '#/components/schemas/PageBase'
+        - type: object
+          properties:
+            content:
+              type: array
+              items: { $ref: '#/components/schemas/NavireDto' }
+
+    # --- Voyage ---
+    VoyageDto:
+      type: object
+      required: [id, navireId, portDepart, portArrivee, dateDepart, etaArrivee, statut]
+      properties:
+        id: { type: integer, format: int64 }
+        navireId: { type: integer, format: int64 }
+        navireNom: { type: string }
+        portDepart: { type: string }
+        portArrivee: { type: string }
+        dateDepart: { type: string, format: date }
+        etaArrivee: { type: string, format: date }
+        dateArriveeReelle: { type: string, format: date, nullable: true }
+        statut: { $ref: '#/components/schemas/StatutVoyage' }
+    CreateVoyageRequest:
+      type: object
+      required: [navireId, portDepart, portArrivee, dateDepart, etaArrivee]
+      properties:
+        navireId: { type: integer, format: int64 }
+        portDepart: { type: string, maxLength: 100 }
+        portArrivee: { type: string, maxLength: 100 }
+        dateDepart: { type: string, format: date }
+        etaArrivee: { type: string, format: date }
+    UpdateVoyageRequest:
+      type: object
+      properties:
+        portDepart: { type: string, maxLength: 100 }
+        portArrivee: { type: string, maxLength: 100 }
+        dateDepart: { type: string, format: date }
+        etaArrivee: { type: string, format: date }
+        dateArriveeReelle: { type: string, format: date }
+        statut: { $ref: '#/components/schemas/StatutVoyage' }
+    PageResponseVoyage:
+      allOf:
+        - $ref: '#/components/schemas/PageBase'
+        - type: object
+          properties:
+            content:
+              type: array
+              items: { $ref: '#/components/schemas/VoyageDto' }
+
+    # --- Conteneur ---
+    ConteneurDto:
+      type: object
+      required: [id, numero, typeConteneur]
+      properties:
+        id: { type: integer, format: int64 }
+        numero: { type: string, pattern: '^[A-Z]{4}\d{7}$' }
+        typeConteneur: { type: string }
+        voyageId: { type: integer, format: int64, nullable: true }
+    CreateConteneurRequest:
+      type: object
+      required: [numero, typeConteneur]
+      properties:
+        numero: { type: string, pattern: '^[A-Z]{4}\d{7}$' }
+        typeConteneur: { type: string, maxLength: 20 }
+        voyageId: { type: integer, format: int64, nullable: true }
+    UpdateConteneurRequest:
+      type: object
+      properties:
+        typeConteneur: { type: string, maxLength: 20 }
+        voyageId: { type: integer, format: int64 }
+    PageResponseConteneur:
+      allOf:
+        - $ref: '#/components/schemas/PageBase'
+        - type: object
+          properties:
+            content:
+              type: array
+              items: { $ref: '#/components/schemas/ConteneurDto' }
+
+    # --- Plan de paiement ---
+    EcheanceDto:
+      type: object
+      required: [id, ordre, libelle, montantPrevu, dateEcheance, statut]
+      properties:
+        id: { type: integer, format: int64 }
+        ordre: { type: integer }
+        libelle: { type: string }
+        montantPrevu: { type: number, format: double }
+        dateEcheance: { type: string, format: date }
+        statut: { $ref: '#/components/schemas/StatutPaiement' }
+    CreateEcheanceRequest:
+      type: object
+      required: [ordre, libelle, montantPrevu, dateEcheance]
+      properties:
+        ordre: { type: integer, minimum: 1 }
+        libelle: { type: string, maxLength: 100 }
+        montantPrevu: { type: number, format: double, minimum: 0 }
+        dateEcheance: { type: string, format: date }
+    PlanPaiementDto:
+      type: object
+      required: [id, cargaisonId, montantTotal, statut, echeances]
+      properties:
+        id: { type: integer, format: int64 }
+        cargaisonId: { type: integer, format: int64 }
+        numeroTracage: { type: string }
+        montantTotal: { type: number, format: double }
+        montantRegle: { type: number, format: double }
+        montantRestant: { type: number, format: double }
+        devise: { type: string }
+        statut: { $ref: '#/components/schemas/StatutPaiement' }
+        echeances:
+          type: array
+          items: { $ref: '#/components/schemas/EcheanceDto' }
+    CreatePlanPaiementRequest:
+      type: object
+      required: [cargaisonId, echeances]
+      properties:
+        cargaisonId: { type: integer, format: int64 }
+        devise: { type: string, minLength: 3, maxLength: 3 }
+        echeances:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/CreateEcheanceRequest' }
+
+    # --- Reglement ---
+    ReglementDto:
+      type: object
+      required: [id, montant, modePaiement, dateReglement]
+      properties:
+        id: { type: integer, format: int64 }
+        planPaiementId: { type: integer, format: int64, nullable: true }
+        echeanceId: { type: integer, format: int64, nullable: true }
+        montant: { type: number, format: double }
+        modePaiement: { $ref: '#/components/schemas/ModePaiement' }
+        referenceTransaction: { type: string, nullable: true }
+        dateReglement: { type: string, format: date }
+        encaissePaiUserId: { type: integer, format: int64, nullable: true }
+        encaissePar: { type: string, nullable: true }
+        commentaire: { type: string, nullable: true }
+    CreateReglementRequest:
+      type: object
+      required: [cargaisonId, montant, modePaiement, dateReglement]
+      properties:
+        cargaisonId: { type: integer, format: int64 }
+        montant: { type: number, format: double, minimum: 0 }
+        modePaiement: { $ref: '#/components/schemas/ModePaiement' }
+        referenceTransaction: { type: string, maxLength: 100 }
+        dateReglement: { type: string, format: date }
+        echeanceId: { type: integer, format: int64, nullable: true }
+        commentaire: { type: string, maxLength: 500 }
+    PageResponseReglement:
+      allOf:
+        - $ref: '#/components/schemas/PageBase'
+        - type: object
+          properties:
+            content:
+              type: array
+              items: { $ref: '#/components/schemas/ReglementDto' }
+
+    # --- Facture ---
+    FactureDto:
+      type: object
+      required: [id, numero, cargaisonId, dateFacture, montantHt, montantTtc]
+      properties:
+        id: { type: integer, format: int64 }
+        numero: { type: string }
+        cargaisonId: { type: integer, format: int64 }
+        numeroTracage: { type: string }
+        dateFacture: { type: string, format: date }
+        montantHt: { type: number, format: double }
+        montantTva: { type: number, format: double }
+        montantTtc: { type: number, format: double }
+        devise: { type: string }
+        envoyeeEmail: { type: boolean }
+        envoyeeWhatsapp: { type: boolean }
+        dateEnvoi: { type: string, format: date-time, nullable: true }
+
+    # --- Pagination commune (pour DRY) ---
+    PageBase:
+      type: object
+      required: [page, size, totalElements, totalPages, first, last]
+      properties:
+        page: { type: integer }
+        size: { type: integer }
+        totalElements: { type: integer, format: int64 }
+        totalPages: { type: integer }
+        first: { type: boolean }
+        last: { type: boolean }

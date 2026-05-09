@@ -1,0 +1,55 @@
+spring:
+  application:
+    name: suivicargo
+  profiles:
+    active: dev
+  jackson:
+    default-property-inclusion: non_null
+    # Note Jackson 3 (Spring Boot 4) : WRITE_DATES_AS_TIMESTAMPS a été déplacé hors
+    # de SerializationFeature. Par défaut Jackson 3 sérialise déjà les dates en
+    # ISO-8601, donc aucune config n'est nécessaire ici.
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+# Documentation OpenAPI / Swagger UI
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: alpha
+    tags-sorter: alpha
+
+# Configuration applicative custom
+app:
+  jwt:
+    # Clé encodée en Base64. À CHANGER en production via variable d'environnement APP_JWT_SECRET.
+    secret: ${APP_JWT_SECRET:Y2hhbmdlLW1lLWluLXByb2QtdGhpcy1pcy1hLXZlcnktbG9uZy1zZWNyZXQta2V5LWZvci1kZXY=}
+    expiration-minutes: ${APP_JWT_EXP_MIN:120}
+    issuer: suivicargo
+  tracking:
+    prefix: MAR
+  facture:
+    prefix: FAC
+  notifications:
+    email:
+      enabled: ${APP_NOTIF_EMAIL:true}
+      from: ${APP_MAIL_FROM:no-reply@suivicargo.local}
+    whatsapp:
+      enabled: ${APP_NOTIF_WHATSAPP:false}
+      twilio-account-sid: ${TWILIO_SID:}
+      twilio-auth-token: ${TWILIO_TOKEN:}
+      twilio-from: ${TWILIO_FROM:}
+
+logging:
+  level:
+    root: INFO
+    com.elior.suivicargo: DEBUG
+    org.hibernate.SQL: WARN

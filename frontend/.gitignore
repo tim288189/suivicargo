@@ -1,0 +1,20 @@
+# Build
+dist/
+out-tsc/
+node_modules/
+
+# Generated API client (régénéré à chaque build)
+src/app/core/api/generated/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+npm-debug.log
+yarn-error.log

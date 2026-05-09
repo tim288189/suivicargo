@@ -1,0 +1,30 @@
+services:
+  mysql:
+    image: 'mysql:8.4'
+    container_name: suivicargo-mysql
+    environment:
+      - 'MYSQL_DATABASE=suivicargo'
+      - 'MYSQL_USER=suivicargo'
+      - 'MYSQL_PASSWORD=suivicargo'
+      - 'MYSQL_ROOT_PASSWORD=root_secret_change_me'
+    ports:
+      - '3306:3306'
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_secret_change_me" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MailDev — serveur SMTP local pour intercepter les emails en dev
+  # Web UI sur http://localhost:1080
+  maildev:
+    image: 'maildev/maildev:latest'
+    container_name: suivicargo-maildev
+    ports:
+      - '1025:1025'    # SMTP
+      - '1080:1080'    # Web UI
+
+volumes:
+  mysql_data:
