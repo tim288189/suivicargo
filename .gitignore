@@ -31,3 +31,33 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# ============================================================
+# A2K basics — Pré-requis set-up Claude Code (DO NOT MODIFY)
+# Suppression de ces lignes casse les hooks orchestrateur+sub-agents
+# Cf. ~/.claude/rules/git_workflow.md § "Pré-requis set-up A2K"
+# Source kit : ~/.claude/templates/a2k-basics/gitignore-snippet.txt
+# ============================================================
+
+# Claude Code: ignore le contenu de .claude/ SAUF settings.json + hooks autorisés
+# settings.local.json reste gitignored (personnel machine-spécifique)
+# NB: utiliser .claude/* (contenu) et non .claude/ (dir entier) pour permettre la négation
+.claude/*
+!.claude/settings.json
+
+# Marker files éphémères hook WorktreeCreate (créés orchestrateur, auto-supprimés hook)
+.claude/.worktree-source.tmp
+.claude/.worktree-branch-name.tmp
+
+# Hooks autorisés (négations explicites)
+!.claude/hooks/
+.claude/hooks/*
+!.claude/hooks/auto-approve-worktree.ps1
+!.claude/hooks/worktree-create.ps1
+
+# Logs hook (debug.log généré runtime — gitignored)
+.claude/hooks/debug.log
+
+# ============================================================
+# FIN bloc A2K basics — DO NOT MODIFY
+# ============================================================
