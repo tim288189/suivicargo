@@ -1,6 +1,6 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, Input, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
@@ -11,10 +11,11 @@ import { ToastModule } from 'primeng/toast';
 import { MessageService } from 'primeng/api';
 
 import { CargaisonsService } from '@api-gen/cargaisons/cargaisons.service';
+import { VoyagesService }    from '@api-gen/voyages/voyages.service';
 import {
   CargaisonDetailDto,
   StatutCargaison,
-  EvenementHistoriqueDto
+  VoyageDto
 } from '@api-gen/schemas';
 import { AuthService } from '@core/auth/auth.service';
 import { Role } from '@core/models/role.enum';
@@ -23,7 +24,7 @@ import { Role } from '@core/models/role.enum';
   selector: 'app-cargaison-detail',
   standalone: true,
   imports: [
-    DatePipe, DecimalPipe, RouterLink, ReactiveFormsModule,
+    DatePipe, DecimalPipe, RouterLink, ReactiveFormsModule, FormsModule,
     ButtonModule, TagModule, DialogModule, SelectModule, InputTextModule, ToastModule
   ],
   providers: [MessageService],
@@ -196,6 +197,50 @@ import { Role } from '@core/models/role.enum';
             }
           </section>
 
+          <!-- Voyage -->
+          <section class="bg-white rounded-lg shadow p-5">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">
+                Voyage
+              </h2>
+              @if (canChangeStatus()) {
+                <button pButton type="button" icon="pi pi-pencil"
+                        [label]="c.voyageId ? 'Modifier' : 'Assigner'"
+                        class="p-button-text p-button-sm"
+                        (click)="openVoyageDialog()"></button>
+              }
+            </div>
+            @if (c.voyageId) {
+              <div class="space-y-1 text-sm">
+                <div class="font-semibold text-gray-900">
+                  {{ c.voyageNavireNom }}
+                </div>
+                <div class="text-gray-700">
+                  <i class="pi pi-arrow-right-arrow-left text-xs mr-1"></i>
+                  {{ c.voyagePortDepart }} → {{ c.voyagePortArrivee }}
+                </div>
+                @if (c.voyageDateDepart) {
+                  <div class="text-xs text-gray-500">
+                    Départ : {{ c.voyageDateDepart | date: 'shortDate' }}
+                    @if (c.voyageEtaArrivee) {
+                      · ETA : {{ c.voyageEtaArrivee | date: 'shortDate' }}
+                    }
+                  </div>
+                }
+                @if (c.voyageStatut) {
+                  <div class="mt-2">
+                    <p-tag [value]="c.voyageStatut!"
+                           [severity]="voyageSeverityFor(c.voyageStatut!)"></p-tag>
+                  </div>
+                }
+              </div>
+            } @else {
+              <div class="text-sm text-gray-500 italic">
+                Cargaison non encore affectée à un voyage.
+              </div>
+            }
+          </section>
+
           <!-- Paiement -->
           <section class="bg-white rounded-lg shadow p-5">
             <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
@@ -233,6 +278,37 @@ import { Role } from '@core/models/role.enum';
         </div>
       </div>
 
+      <!-- ===== Dialog assignation voyage ===== -->
+      <p-dialog [(visible)]="voyageDialogVisible" header="Assigner à un voyage"
+                [modal]="true" [style]="{ width: '36rem' }" [closable]="!savingVoyage()">
+        <div class="space-y-3">
+          <p class="text-sm text-gray-600">
+            Sélectionne un voyage parmi ceux programmés ou en cours.
+            Le statut de la cargaison s'alignera sur celui du voyage à chaque mise à jour.
+          </p>
+          <p-select [options]="voyageOptions()" [(ngModel)]="voyageSelected"
+                    optionLabel="label" optionValue="value"
+                    placeholder="Choisir un voyage"
+                    [style]="{ width: '100%' }"
+                    [showClear]="true"></p-select>
+          <div class="flex justify-end gap-2 pt-2">
+            <button pButton type="button" label="Annuler" class="p-button-text"
+                    (click)="voyageDialogVisible.set(false)"
+                    [disabled]="savingVoyage()"></button>
+            @if (data()?.voyageId) {
+              <button pButton type="button" label="Détacher" class="p-button-outlined p-button-danger"
+                      (click)="submitVoyageChange(null)"
+                      [disabled]="savingVoyage()"
+                      [loading]="savingVoyage()"></button>
+            }
+            <button pButton type="button" label="Assigner"
+                    (click)="submitVoyageChange(voyageSelected)"
+                    [disabled]="!voyageSelected || savingVoyage()"
+                    [loading]="savingVoyage()"></button>
+          </div>
+        </div>
+      </p-dialog>
+
       <!-- ===== Dialog changement de statut ===== -->
       <p-dialog [(visible)]="statusDialogVisible" header="Changer le statut"
                 [modal]="true" [style]="{ width: '32rem' }" [closable]="!savingStatus()">
@@ -263,11 +339,12 @@ import { Role } from '@core/models/role.enum';
 })
 export class CargaisonDetailComponent {
 
-  private readonly api    = inject(CargaisonsService);
-  private readonly auth   = inject(AuthService);
-  private readonly router = inject(Router);
-  private readonly fb     = inject(FormBuilder);
-  private readonly toast  = inject(MessageService);
+  private readonly api        = inject(CargaisonsService);
+  private readonly voyagesApi = inject(VoyagesService);
+  private readonly auth       = inject(AuthService);
+  private readonly router     = inject(Router);
+  private readonly fb         = inject(FormBuilder);
+  private readonly toast      = inject(MessageService);
 
   protected readonly data       = signal<CargaisonDetailDto | null>(null);
   protected readonly loading    = signal(true);
@@ -275,6 +352,12 @@ export class CargaisonDetailComponent {
 
   protected readonly statusDialogVisible = signal(false);
   protected readonly savingStatus        = signal(false);
+
+  // ---- Assignation voyage ----
+  protected readonly voyageDialogVisible = signal(false);
+  protected readonly savingVoyage        = signal(false);
+  protected readonly voyageOptions       = signal<Array<{ label: string; value: number }>>([]);
+  protected voyageSelected: number | null = null;
 
   /** Lié à la route /app/cargaisons/:id par withComponentInputBinding(). */
   @Input() set id(value: string) {
@@ -341,6 +424,56 @@ export class CargaisonDetailComponent {
     const regle = Number(c.montantRegle ?? 0);
     if (total <= 0) return 0;
     return Math.min(100, Math.round((regle / total) * 100));
+  }
+
+  protected voyageSeverityFor(s: string): 'success' | 'info' | 'warn' | 'danger' | 'contrast' {
+    switch (s) {
+      case 'ARRIVE':    return 'success';
+      case 'EN_MER':    return 'warn';
+      case 'ANNULE':    return 'danger';
+      case 'PROGRAMME': return 'info';
+      default:          return 'contrast';
+    }
+  }
+
+  protected openVoyageDialog(): void {
+    this.voyageSelected = this.data()?.voyageId ?? null;
+    this.voyageDialogVisible.set(true);
+    // Charge les voyages PROGRAMME ou EN_MER
+    this.voyagesApi.listVoyages({ size: 200 } as never).subscribe({
+      next: (page: any) => {
+        const opts = (page.content ?? [])
+          .filter((v: VoyageDto) => v.statut === 'PROGRAMME' || v.statut === 'EN_MER')
+          .map((v: VoyageDto) => ({
+            label: `${v.navireNom} — ${v.portDepart} → ${v.portArrivee}`
+                 + ` (départ ${v.dateDepart})`,
+            value: v.id!
+          }));
+        this.voyageOptions.set(opts);
+      }
+    });
+  }
+
+  protected submitVoyageChange(voyageId: number | null): void {
+    const c = this.data();
+    if (!c) return;
+    this.savingVoyage.set(true);
+
+    this.api.assignerVoyageCargaison(c.id!, { voyageId: voyageId ?? undefined } as never).subscribe({
+      next: () => {
+        this.toast.add({
+          severity: 'success',
+          summary: voyageId ? 'Voyage assigné' : 'Cargaison détachée'
+        });
+        this.voyageDialogVisible.set(false);
+        this.savingVoyage.set(false);
+        this.fetch(c.id!);
+      },
+      error: () => {
+        this.toast.add({ severity: 'error', summary: 'Erreur', detail: 'Action impossible' });
+        this.savingVoyage.set(false);
+      }
+    });
   }
 
   protected openStatusDialog(): void {

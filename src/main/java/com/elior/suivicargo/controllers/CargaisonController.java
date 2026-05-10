@@ -62,4 +62,13 @@ public class CargaisonController {
             @RequestParam(required = false) String commentaire) {
         return service.changerStatut(id, statut, commentaire);
     }
+
+    @PatchMapping("/{id}/voyage")
+    @PreAuthorize("hasAnyRole('SUPERVISOR','ADMIN')")
+    @Operation(summary = "Affecter / détacher une cargaison à un voyage (SUPERVISOR/ADMIN)")
+    public CargaisonDto assignerVoyage(
+            @PathVariable Long id,
+            @RequestParam(required = false) Long voyageId) {
+        return service.assignerVoyage(id, voyageId);
+    }
 }

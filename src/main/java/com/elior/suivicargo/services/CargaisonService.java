@@ -11,9 +11,11 @@ import com.elior.suivicargo.mappers.CargaisonMapper;
 import com.elior.suivicargo.models.Cargaison;
 import com.elior.suivicargo.models.Client;
 import com.elior.suivicargo.models.HistoriqueStatut;
+import com.elior.suivicargo.models.Voyage;
 import com.elior.suivicargo.repositories.CargaisonRepository;
 import com.elior.suivicargo.repositories.ClientRepository;
 import com.elior.suivicargo.repositories.HistoriqueStatutRepository;
+import com.elior.suivicargo.repositories.VoyageRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -35,6 +37,7 @@ public class CargaisonService {
     private final CargaisonRepository cargaisonRepository;
     private final HistoriqueStatutRepository historiqueRepository;
     private final ClientRepository clientRepository;
+    private final VoyageRepository voyageRepository;
     private final NumeroTracageService numeroTracageService;
     private final CargaisonMapper mapper;
 
@@ -173,6 +176,48 @@ public class CargaisonService {
                 portArrivee,
                 events
         );
+    }
+
+    /**
+     * Affecte (ou détache si voyageId == null) une cargaison à un voyage.
+     * Crée une entrée d'historique pour tracer l'opération.
+     */
+    @Transactional
+    public CargaisonDto assignerVoyage(Long cargaisonId, Long voyageId) {
+        Cargaison c = cargaisonRepository.findById(cargaisonId)
+                .orElseThrow(() -> BusinessException.notFound("CARGAISON_NOT_FOUND",
+                        "Cargaison introuvable : " + cargaisonId));
+
+        Voyage voyage = null;
+        if (voyageId != null) {
+            voyage = voyageRepository.findById(voyageId)
+                    .orElseThrow(() -> BusinessException.notFound("VOYAGE_NOT_FOUND",
+                            "Voyage introuvable : " + voyageId));
+        }
+
+        Voyage ancien = c.getVoyage();
+        c.setVoyage(voyage);
+        cargaisonRepository.save(c);
+
+        String commentaire;
+        if (voyage != null) {
+            commentaire = "Affectée au voyage " + voyage.getNavire().getNom()
+                    + " (" + voyage.getPortDepart() + " → " + voyage.getPortArrivee() + ")";
+        } else if (ancien != null) {
+            commentaire = "Détachée du voyage " + ancien.getNavire().getNom();
+        } else {
+            commentaire = "Aucun changement de voyage";
+        }
+
+        historiqueRepository.save(HistoriqueStatut.builder()
+                .cargaison(c)
+                .ancienStatut(c.getStatut())
+                .nouveauStatut(c.getStatut())
+                .commentaire(commentaire)
+                .auteur(currentUserName())
+                .build());
+
+        return mapper.toDto(c);
     }
 
     private String currentUserName() {

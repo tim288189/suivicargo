@@ -21,6 +21,7 @@ import java.time.LocalDate;
                 @Index(name = "idx_cargaison_client", columnList = "client_id"),
                 @Index(name = "idx_cargaison_statut", columnList = "statut"),
                 @Index(name = "idx_cargaison_conteneur", columnList = "conteneur_id"),
+                @Index(name = "idx_cargaison_voyage", columnList = "voyage_id"),
                 @Index(name = "idx_cargaison_eta", columnList = "date_livraison_estimee")
         }
 )
@@ -42,6 +43,14 @@ public class Cargaison extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "conteneur_id", foreignKey = @ForeignKey(name = "fk_cargaison_conteneur"))
     private Conteneur conteneur;
+
+    /**
+     * Voyage (navire + trajet daté) sur lequel la cargaison est embarquée.
+     * Optionnel : tant que la cargaison n'est pas affectée, voyage est null.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "voyage_id", foreignKey = @ForeignKey(name = "fk_cargaison_voyage"))
+    private Voyage voyage;
 
     @Column(name = "nombre_colis", nullable = false)
     private Integer nombreColis;

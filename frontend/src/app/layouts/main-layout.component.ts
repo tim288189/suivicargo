@@ -55,6 +55,12 @@ import { Role } from '@core/models/role.enum';
             <span>Navires</span>
           </a>
 
+          <a routerLink="/app/voyages" routerLinkActive="nav-active"
+             class="nav-link">
+            <i class="pi pi-globe"></i>
+            <span>Voyages</span>
+          </a>
+
           <div *appHasRole="[Role.ADMIN]"
                class="pt-4 pb-1 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
             Administration

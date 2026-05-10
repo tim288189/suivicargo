@@ -58,6 +58,18 @@ export const routes: Routes = [
           import('./features/navires/navires-list.component').then(m => m.NaviresListComponent)
       },
       {
+        path: 'voyages',
+        canActivate: [roleGuard([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN])],
+        loadComponent: () =>
+          import('./features/voyages/voyages-list.component').then(m => m.VoyagesListComponent)
+      },
+      {
+        path: 'voyages/:id',
+        canActivate: [roleGuard([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN])],
+        loadComponent: () =>
+          import('./features/voyages/voyage-detail.component').then(m => m.VoyageDetailComponent)
+      },
+      {
         path: 'admin/users',
         canActivate: [roleGuard([Role.ADMIN])],
         loadComponent: () =>

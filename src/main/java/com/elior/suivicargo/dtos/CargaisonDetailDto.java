@@ -1,6 +1,7 @@
 package com.elior.suivicargo.dtos;
 
 import com.elior.suivicargo.enums.StatutCargaison;
+import com.elior.suivicargo.enums.StatutVoyage;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -23,6 +24,14 @@ public record CargaisonDetailDto(
         String adresseLivraison,
         Long conteneurId,
         String conteneurNumero,
+        Long voyageId,
+        Long voyageNavireId,
+        String voyageNavireNom,
+        String voyagePortDepart,
+        String voyagePortArrivee,
+        LocalDate voyageDateDepart,
+        LocalDate voyageEtaArrivee,
+        StatutVoyage voyageStatut,
         Integer nombreColis,
         BigDecimal poidsKg,
         BigDecimal volumeM3,

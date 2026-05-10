@@ -1,10 +1,13 @@
 package com.elior.suivicargo.controllers;
 
+import com.elior.suivicargo.dtos.CargaisonDto;
 import com.elior.suivicargo.dtos.CreateVoyageRequest;
 import com.elior.suivicargo.dtos.PageResponse;
 import com.elior.suivicargo.dtos.UpdateVoyageRequest;
 import com.elior.suivicargo.dtos.VoyageDto;
 import com.elior.suivicargo.enums.StatutVoyage;
+import com.elior.suivicargo.mappers.CargaisonMapper;
+import com.elior.suivicargo.repositories.CargaisonRepository;
 import com.elior.suivicargo.services.VoyageService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -16,6 +19,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/v1/voyages")
 @RequiredArgsConstructor
@@ -23,6 +28,8 @@ import org.springframework.web.bind.annotation.*;
 public class VoyageController {
 
     private final VoyageService service;
+    private final CargaisonRepository cargaisonRepository;
+    private final CargaisonMapper cargaisonMapper;
 
     @GetMapping
     @PreAuthorize("hasAnyRole('EMPLOYEE','SUPERVISOR','ADMIN')")
@@ -41,6 +48,15 @@ public class VoyageController {
         return service.getById(id);
     }
 
+    @GetMapping("/{id}/cargaisons")
+    @PreAuthorize("hasAnyRole('EMPLOYEE','SUPERVISOR','ADMIN')")
+    @Operation(summary = "Lister les cargaisons rattachées à un voyage")
+    public List<CargaisonDto> listCargaisons(@PathVariable Long id) {
+        return cargaisonRepository.findByVoyageId(id).stream()
+                .map(cargaisonMapper::toDto)
+                .toList();
+    }
+
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAnyRole('SUPERVISOR','ADMIN')")
@@ -51,7 +67,7 @@ public class VoyageController {
 
     @PatchMapping("/{id}")
     @PreAuthorize("hasAnyRole('SUPERVISOR','ADMIN')")
-    @Operation(summary = "Mettre à jour un voyage (ETA, statut, etc.)")
+    @Operation(summary = "Mettre à jour un voyage (ETA, statut, etc.) — propage le statut aux cargaisons")
     public VoyageDto update(@PathVariable Long id, @Valid @RequestBody UpdateVoyageRequest req) {
         return service.update(id, req);
     }

@@ -238,6 +238,46 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /v1/cargaisons/{id}/voyage:
+    patch:
+      tags: [Cargaisons]
+      summary: Affecter / détacher une cargaison à un voyage (SUPERVISOR/ADMIN)
+      operationId: assignerVoyageCargaison
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+        - in: query
+          name: voyageId
+          required: false
+          schema: { type: integer, format: int64 }
+          description: ID du voyage à assigner. Omettre pour détacher.
+      responses:
+        '200':
+          description: Voyage assigné/détaché
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CargaisonDto'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/voyages/{id}/cargaisons:
+    get:
+      tags: [Voyages]
+      summary: Cargaisons rattachées à un voyage
+      operationId: listCargaisonsDuVoyage
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Liste des cargaisons du voyage
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CargaisonDto' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   # ---------- Tracking public ----------
   /v1/tracking/{numeroTracage}:
     get:
@@ -1012,6 +1052,19 @@ components:
         conteneurNumero:
           type: string
           nullable: true
+        voyageId:
+          type: integer
+          format: int64
+          nullable: true
+        voyageNavireNom:
+          type: string
+          nullable: true
+        voyagePortDepart:
+          type: string
+          nullable: true
+        voyagePortArrivee:
+          type: string
+          nullable: true
         nombreColis:
           type: integer
         poidsKg:
@@ -1078,6 +1131,17 @@ components:
         adresseLivraison: { type: string, nullable: true }
         conteneurId: { type: integer, format: int64, nullable: true }
         conteneurNumero: { type: string, nullable: true }
+        voyageId: { type: integer, format: int64, nullable: true }
+        voyageNavireId: { type: integer, format: int64, nullable: true }
+        voyageNavireNom: { type: string, nullable: true }
+        voyagePortDepart: { type: string, nullable: true }
+        voyagePortArrivee: { type: string, nullable: true }
+        voyageDateDepart: { type: string, format: date, nullable: true }
+        voyageEtaArrivee: { type: string, format: date, nullable: true }
+        voyageStatut:
+          allOf:
+            - $ref: '#/components/schemas/StatutVoyage'
+          nullable: true
         nombreColis: { type: integer }
         poidsKg: { type: number, format: double, nullable: true }
         volumeM3: { type: number, format: double, nullable: true }

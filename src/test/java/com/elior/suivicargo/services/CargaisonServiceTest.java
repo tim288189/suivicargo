@@ -11,6 +11,7 @@ import com.elior.suivicargo.models.HistoriqueStatut;
 import com.elior.suivicargo.repositories.CargaisonRepository;
 import com.elior.suivicargo.repositories.ClientRepository;
 import com.elior.suivicargo.repositories.HistoriqueStatutRepository;
+import com.elior.suivicargo.repositories.VoyageRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,6 +32,7 @@ class CargaisonServiceTest {
     @Mock private CargaisonRepository cargaisonRepository;
     @Mock private HistoriqueStatutRepository historiqueRepository;
     @Mock private ClientRepository clientRepository;
+    @Mock private VoyageRepository voyageRepository;
     @Mock private NumeroTracageService numeroTracageService;
     @Mock private CargaisonMapper mapper;
 
@@ -71,9 +73,14 @@ class CargaisonServiceTest {
         when(numeroTracageService.genererNumero()).thenReturn("MAR-2026-000001");
         when(cargaisonRepository.save(any(Cargaison.class))).thenAnswer(inv -> inv.getArgument(0));
         when(mapper.toDto(any(Cargaison.class))).thenReturn(
-                new CargaisonDto(1L, "MAR-2026-000001", null, null, null, null, null,
-                        3, null, null, BigDecimal.valueOf(1000), BigDecimal.valueOf(500),
-                        BigDecimal.valueOf(500), "XOF", StatutCargaison.ENLEVE, null, false,
+                new CargaisonDto(
+                        1L, "MAR-2026-000001",
+                        null, null, null,                  // client
+                        null, null,                        // conteneur
+                        null, null, null, null,            // voyage
+                        3, null, null,
+                        BigDecimal.valueOf(1000), BigDecimal.valueOf(500), BigDecimal.valueOf(500),
+                        "XOF", StatutCargaison.ENLEVE, null, false,
                         null, null, null, null));
 
         service.create(req);

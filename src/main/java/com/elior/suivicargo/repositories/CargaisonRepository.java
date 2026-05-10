@@ -40,10 +40,13 @@ public interface CargaisonRepository extends JpaRepository<Cargaison, Long> {
     """)
     long countByAnnee(@Param("annee") int annee);
 
+    /** Cargaisons affectées au voyage soit directement (voyage_id), soit via leur conteneur. */
     @Query("""
-        SELECT c FROM Cargaison c
-         WHERE c.conteneur.voyage.id = :voyageId
+        SELECT DISTINCT c FROM Cargaison c
+         WHERE (c.voyage.id = :voyageId OR c.conteneur.voyage.id = :voyageId)
            AND c.supprime = false
     """)
     List<Cargaison> findByVoyageId(@Param("voyageId") Long voyageId);
+
+    Page<Cargaison> findByVoyageIdAndSupprimeFalse(Long voyageId, Pageable pageable);
 }
