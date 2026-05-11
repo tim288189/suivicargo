@@ -32,6 +32,26 @@ class AppUserDetailsServiceTest {
                 .isInstanceOf(UsernameNotFoundException.class);
     }
 
+    /**
+     * Finding #2 — soft-delete cohérence auth.
+     * Un user soft-deleted doit être invisible au lookup : @SQLRestriction("supprime = false")
+     * sur User fait que findByEmailIgnoreCase retourne Optional.empty() pour un user supprimé.
+     * Le service doit alors lever UsernameNotFoundException (impossible de se logger).
+     */
+    @Test
+    @DisplayName("loadUserByUsername() refuse un user soft-deleted (filtre @SQLRestriction)")
+    void loadUserByUsername_softDeletedUser_throwsUsernameNotFoundException() {
+        // GIVEN: findByEmailIgnoreCase retourne empty() — comportement attendu de Hibernate
+        // avec @SQLRestriction("supprime = false") sur l'entité User pour un user supprimé
+        when(userRepository.findByEmailIgnoreCase("deleted@example.com"))
+                .thenReturn(Optional.empty());
+
+        // WHEN / THEN: le service doit refuser l'accès
+        assertThatThrownBy(() -> service.loadUserByUsername("deleted@example.com"))
+                .isInstanceOf(UsernameNotFoundException.class)
+                .hasMessageContaining("deleted@example.com");
+    }
+
     @Test
     @DisplayName("loadUserByUsername() expose l'autorité ROLE_<role>")
     void rolePrefix() {
