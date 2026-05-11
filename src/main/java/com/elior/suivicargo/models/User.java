@@ -7,8 +7,10 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.SQLRestriction;
 
 @Entity
+@SQLRestriction("supprime = false")
 @Table(
         name = "app_user",
         uniqueConstraints = {
