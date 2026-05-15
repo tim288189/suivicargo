@@ -134,4 +134,24 @@ class CargaisonServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("Aucune cargaison");
     }
+
+    /**
+     * Finding #37 — assignerVoyage() ne doit pas accepter un voyage soft-deleted.
+     * Avec @SQLRestriction("supprime = false") sur Voyage, voyageRepository.findById()
+     * retourne Optional.empty() pour un voyage supprimé → BusinessException attendue.
+     */
+    @Test
+    @DisplayName("assignerVoyage() refuse si voyage soft-deleted (findById retourne empty via @SQLRestriction)")
+    void assignerVoyage_softDeletedVoyage_throwsNotFound() {
+        // GIVEN: cargaison trouvée, mais voyage introuvable car soft-deleted
+        // (filtré par @SQLRestriction("supprime = false") au niveau Hibernate)
+        Cargaison c = new Cargaison();
+        when(cargaisonRepository.findById(1L)).thenReturn(Optional.of(c));
+        when(voyageRepository.findById(99L)).thenReturn(Optional.empty());
+
+        // WHEN / THEN
+        assertThatThrownBy(() -> service.assignerVoyage(1L, 99L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Voyage introuvable");
+    }
 }

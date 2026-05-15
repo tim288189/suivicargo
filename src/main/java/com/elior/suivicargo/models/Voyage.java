@@ -7,10 +7,12 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.SQLRestriction;
 
 import java.time.LocalDate;
 
 @Entity
+@SQLRestriction("supprime = false")
 @Table(
         name = "voyage",
         indexes = {
