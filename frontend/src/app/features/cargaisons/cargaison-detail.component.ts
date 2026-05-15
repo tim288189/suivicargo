@@ -19,6 +19,7 @@ import {
 } from '@api-gen/schemas';
 import { AuthService } from '@core/auth/auth.service';
 import { Role } from '@core/models/role.enum';
+import { FacturesDownloadService } from '@api/factures-download.service';
 
 @Component({
   selector: 'app-cargaison-detail',
@@ -67,7 +68,8 @@ import { Role } from '@core/models/role.enum';
           }
           <button pButton icon="pi pi-file-pdf" label="Télécharger facture"
                   class="p-button-outlined"
-                  [disabled]="!c.factureEnvoyee"
+                  [disabled]="!c.factureEnvoyee || downloadingFacture()"
+                  [loading]="downloadingFacture()"
                   (click)="downloadFacture()"></button>
         </div>
       </div>
@@ -339,16 +341,18 @@ import { Role } from '@core/models/role.enum';
 })
 export class CargaisonDetailComponent {
 
-  private readonly api        = inject(CargaisonsService);
-  private readonly voyagesApi = inject(VoyagesService);
-  private readonly auth       = inject(AuthService);
-  private readonly router     = inject(Router);
-  private readonly fb         = inject(FormBuilder);
-  private readonly toast      = inject(MessageService);
+  private readonly api              = inject(CargaisonsService);
+  private readonly voyagesApi       = inject(VoyagesService);
+  private readonly auth             = inject(AuthService);
+  private readonly router           = inject(Router);
+  private readonly fb               = inject(FormBuilder);
+  private readonly toast            = inject(MessageService);
+  private readonly facturesDownload = inject(FacturesDownloadService);
 
-  protected readonly data       = signal<CargaisonDetailDto | null>(null);
-  protected readonly loading    = signal(true);
-  protected readonly notFound   = signal(false);
+  protected readonly data               = signal<CargaisonDetailDto | null>(null);
+  protected readonly loading            = signal(true);
+  protected readonly notFound           = signal(false);
+  protected readonly downloadingFacture = signal(false);
 
   protected readonly statusDialogVisible = signal(false);
   protected readonly savingStatus        = signal(false);
@@ -508,10 +512,30 @@ export class CargaisonDetailComponent {
   protected downloadFacture(): void {
     const c = this.data();
     if (!c?.factureEnvoyee || !c.id) return;
-    // L'API renvoie un PDF binaire ; on l'ouvre dans un nouvel onglet via le mutator HttpClient.
-    // Simple fallback : un click direct sur l'URL avec le JWT en query (pas idéal en prod).
-    // En pratique, on appellera plutôt FacturesService.downloadFacturePdf et on créera un Blob.
-    window.open(`/api/v1/factures/by-cargaison/${c.id}/pdf`, '_blank');
+
+    this.downloadingFacture.set(true);
+
+    this.facturesDownload.downloadFacturePdf(c.id).subscribe({
+      next: (blob: Blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a   = document.createElement('a');
+        a.href     = url;
+        a.download = `facture-${c.numeroTracage}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        this.downloadingFacture.set(false);
+      },
+      error: () => {
+        this.toast.add({
+          severity: 'error',
+          summary:  'Téléchargement impossible',
+          detail:   'Réessaye dans un instant'
+        });
+        this.downloadingFacture.set(false);
+      }
+    });
   }
 
   private fetch(id: number): void {
